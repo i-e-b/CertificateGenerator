@@ -4,21 +4,24 @@ if ($PSVersionTable.PSVersion.Major -lt 3) {
 	throw "Powershell version 3 or greater required for this script"
 }
 
+$GLOBAL_PASS = read-host "Enter password for the certificates" 
+$GLOBAL_PASS_SS = (ConvertTo-SecureString "$GLOBAL_PASS" -AsPlainText -Force)
+
 . ./src/New-SelfSignedCertificateEx.ps1
 
 function GenSite($site, $auth) {
-	New-SelfsignedCertificateEx -Subject "CN=$site" -Authority "$auth" -SAN "$site" -Path "$site.pfx" -EKU "1.3.6.1.5.5.7.3.1", "Client authentication" -KeyUsage "KeyEncipherment, DigitalSignature, KeyCertSign, DataEncipherment" -AllowSMIME -Exportable -SerialNumber "01a4ff2" -KeySpec "Signature"
+	New-SelfsignedCertificateEx -Subject "CN=$site" -Authority "$auth" -SAN "$site" -Path "$site.pfx" -EKU "1.3.6.1.5.5.7.3.1", "Client authentication" -KeyUsage "KeyEncipherment, DigitalSignature, KeyCertSign, DataEncipherment" -AllowSMIME -Exportable -SerialNumber "01a4ff2" -KeySpec "Signature" -Password $GLOBAL_PASS_SS
 	Extract "$site.pfx"
 }
 
 function Extract($src) {
 	$dir = pwd
-	./bin/openssl.exe pkcs12 -in "$dir\$src" -nocerts -nodes -out pk.pem
+	./bin/openssl.exe pkcs12 -in "$dir\$src" -nocerts -nodes -out pk.pem -passin "pass:$GLOBAL_PASS"
 	./bin/pvk -in pk.pem -topvk -out "$dir\$src.pvk"
 	rm pk.pem
 
-	./bin/openssl.exe pkcs12 -in "$dir\$src" -out pub.pem -nodes
-	./bin/openssl.exe x509 -in pub.pem -out "$dir\$src.cer" -outform der
+	./bin/openssl.exe pkcs12 -in "$dir\$src" -out pub.pem -nodes -passin "pass:$GLOBAL_PASS"
+	./bin/openssl.exe x509 -in pub.pem -out "$dir\$src.cer" -outform der -passin "pass:$GLOBAL_PASS"
 	rm pub.pem
 }
 
@@ -37,8 +40,11 @@ function Import-PfxCertificate {
 	$store.close()
 }
 
-New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "DevRootCA.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable
-Extract "DevRootCA.pfx"
-Import-PfxCertificate -certPath "DevRootCA.pfx.cer" -certRootStore "LocalMachine" -certStore "Root"
+$rootFile = "DevRootCA"
 
-GenSite "www.example.com" "DevRootCA.pfx.cer"
+New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "$rootFile.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable -Password $GLOBAL_PASS_SS
+Extract "$rootFile.pfx"
+Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
+
+GenSite "www.example.com" "$rootFile.pfx.cer"
+GenSite "www.example.net" "$rootFile.pfx.cer"
