@@ -25,6 +25,23 @@ function Extract($src) {
 	rm pub.pem
 }
 
+function SerialiseCert ([string]$cerFilename, [string]$pwd, [string]$destFile) {
+	$cmdBuilder = New-Object -TypeName System.Text.StringBuilder
+
+	$dir = pwd
+	echo "Serialising $dir\$cerFilename"
+	if ($pwd) {
+		$certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$dir\$cerFilename", $pwd)
+	} else {
+		$certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$dir\$cerFilename")
+	}
+
+	$hex = (($certificate.Export("Cert")) | foreach { $_.ToString("X2") }) -join ""
+	$cmdBuilder = $cmdBuilder.Append("0x")
+	$cmdBuilder = $cmdBuilder.Append($hex)
+	echo $cmdBuilder.ToString() > $destFile
+}
+
 function Import-PfxCertificate {
 	param([String]$certPath,[String]$certRootStore = "CurrentUser",[String]$certStore = "My",$pfxPass = $null)
 	$pfx = new-object System.Security.Cryptography.X509Certificates.X509Certificate2
@@ -46,5 +63,14 @@ New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path 
 Extract "$rootFile.pfx"
 Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
 
-GenSite "www.example.com" "$rootFile.pfx.cer"
-GenSite "www.example.net" "$rootFile.pfx.cer"
+
+GenSite "a.example.net" "$rootFile.pfx.cer"
+
+GenSite "b.example.com" "$rootFile.pfx.cer"
+SerialiseCert "b.example.com.pfx" -pwd $GLOBAL_PASS -destFile "cer_b.example.com_.txt"
+
+GenSite "c.example.com" "$rootFile.pfx.cer"
+SerialiseCert "c.example.com.pfx.cer" -destFile "cer_ppm.c.example.com_.txt"
+
+
+
