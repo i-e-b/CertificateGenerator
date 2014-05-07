@@ -9,37 +9,36 @@ $GLOBAL_PASS_SS = (ConvertTo-SecureString "$GLOBAL_PASS" -AsPlainText -Force)
 
 . ./src/New-SelfSignedCertificateEx.ps1
 
-function GenSite($site, $auth) {
-	New-SelfsignedCertificateEx -Subject "CN=$site" -Authority "$auth" -SAN "$site" -Path "$site.pfx" -EKU "1.3.6.1.5.5.7.3.1", "Client authentication" -KeyUsage "KeyEncipherment, DigitalSignature, KeyCertSign, DataEncipherment" -AllowSMIME -Exportable -SerialNumber "01a4ff2" -KeySpec "Signature" -Password $GLOBAL_PASS_SS
-	Extract "$site.pfx"
-}
-
-function Extract($src) {
-	$dir = pwd
-	./bin/openssl.exe pkcs12 -in "$dir\$src" -nocerts -nodes -out pk.pem -passin "pass:$GLOBAL_PASS"
-	./bin/pvk -in pk.pem -topvk -out "$dir\$src.pvk"
-	rm pk.pem
-
-	./bin/openssl.exe pkcs12 -in "$dir\$src" -out pub.pem -nodes -passin "pass:$GLOBAL_PASS"
-	./bin/openssl.exe x509 -in pub.pem -out "$dir\$src.cer" -outform der -passin "pass:$GLOBAL_PASS"
-	rm pub.pem
-}
 
 function SerialiseCert ([string]$cerFilename, [string]$pwd, [string]$destFile) {
 	$cmdBuilder = New-Object -TypeName System.Text.StringBuilder
 
 	$dir = pwd
-	echo "Serialising $dir\$cerFilename"
+	echo "Serialising $dir\$cerFilename to $destFile"
 	if ($pwd) {
 		$certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$dir\$cerFilename", $pwd)
 	} else {
 		$certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$dir\$cerFilename")
 	}
 
-	$hex = (($certificate.Export("Cert")) | foreach { $_.ToString("X2") }) -join ""
-	$cmdBuilder = $cmdBuilder.Append("0x")
-	$cmdBuilder = $cmdBuilder.Append($hex)
-	echo $cmdBuilder.ToString() > $destFile
+	$cmdBuilder = $cmdBuilder.AppendFormat("0x{0}", $certificate.GetRawCertDataString())
+	echo $cmdBuilder.ToString() > "$dir\$destFile"
+}
+
+function Extract($src) {
+	$dir = pwd
+
+	./bin/openssl.exe pkcs12 -in "$dir\$src" -out pub.pem -nokeys -passin "pass:$GLOBAL_PASS"
+	./bin/openssl.exe x509 -in pub.pem -out "$dir\$src.cer" -outform der -passin "pass:$GLOBAL_PASS"
+	rm pub.pem
+}
+
+function GenSite($site, $auth) {
+	$dir = pwd
+	
+	New-SelfsignedCertificateEx -Subject "CN=$site" -Authority "$auth" -SAN "$site" -Path "$site.pfx" -EKU "1.3.6.1.5.5.7.3.1", "Client authentication" -KeyUsage "KeyEncipherment, DigitalSignature, KeyCertSign, DataEncipherment" -AllowSMIME -Exportable -SerialNumber "01a4ff2" -KeySpec "Exchange" -Password $GLOBAL_PASS_SS
+	Extract "$site.pfx"
+	SerialiseCert "$site.pfx.cer" -destFile "$site.cert.txt"
 }
 
 function Import-PfxCertificate {
@@ -64,13 +63,10 @@ Extract "$rootFile.pfx"
 Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
 
 
-GenSite "a.example.net" "$rootFile.pfx.cer"
+GenSite "core.example.com" "$rootFile.pfx.cer"
+SerialiseCert "core.example.com.pfx" -pwd $GLOBAL_PASS -destFile "core.example.pfx.txt"
 
-GenSite "b.example.com" "$rootFile.pfx.cer"
-SerialiseCert "b.example.com.pfx" -pwd $GLOBAL_PASS -destFile "cer_b.example.com_.txt"
-
-GenSite "c.example.com" "$rootFile.pfx.cer"
-SerialiseCert "c.example.com.pfx.cer" -destFile "cer_ppm.c.example.com_.txt"
+GenSite "other.example.net" "$rootFile.pfx.cer"
 
 
 
