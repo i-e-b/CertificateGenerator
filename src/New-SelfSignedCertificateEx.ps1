@@ -94,7 +94,7 @@ function New-SelfSignedCertificateEx {
 	to use this parameter, the extension must be formed in a collection of initialized
 	System.Security.Cryptography.X509Certificates.X509Extension objects.
 .Parameter SignatureAlgorithm
-	Specifies signature algorithm used to sign the certificate. By default 'SHA1'
+	Specifies signature algorithm used to sign the certificate. By default 'SHA256'
 	algorithm is used.
 .Parameter FriendlyName
 	Specifies friendly name for the certificate.
@@ -181,7 +181,7 @@ function New-SelfSignedCertificateEx {
 		[int]$PathLength = -1,
 		[Security.Cryptography.X509Certificates.X509ExtensionCollection]$CustomExtension,
 		[ValidateSet('MD5','SHA1','SHA256','SHA384','SHA512')]
-		[string]$SignatureAlgorithm = "SHA1",
+		[string]$SignatureAlgorithm = "SHA256",
 		[string]$FriendlyName,
 		[Parameter(ParameterSetName = '__store')]
 		[Security.Cryptography.X509Certificates.StoreLocation]$StoreLocation = "CurrentUser",

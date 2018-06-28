@@ -58,15 +58,17 @@ function Import-PfxCertificate {
 
 $rootFile = "DevRootCA"
 
-New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "$rootFile.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable -Password $GLOBAL_PASS_SS
-Extract "$rootFile.pfx"
-Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
+# Uncomment this bit to get a root certificate
+#New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "$rootFile.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable -Password $GLOBAL_PASS_SS
+#Extract "$rootFile.pfx"
+#Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
 
+# Make certs for sites
+GenSite "iebwraptest.cloudapp.net" "$rootFile.pfx.cer"
+GenSite "localhost" "$rootFile.pfx.cer"
+#SerialiseCert "core.example.com.pfx" -pwd $GLOBAL_PASS -destFile "core.example.pfx.txt"
 
-GenSite "core.example.com" "$rootFile.pfx.cer"
-SerialiseCert "core.example.com.pfx" -pwd $GLOBAL_PASS -destFile "core.example.pfx.txt"
-
-GenSite "other.example.net" "$rootFile.pfx.cer"
+#GenSite "other.example.net" "$rootFile.pfx.cer"
 
 
 
