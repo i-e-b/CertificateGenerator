@@ -9,7 +9,7 @@ $GLOBAL_PASS_SS = (ConvertTo-SecureString "$GLOBAL_PASS" -AsPlainText -Force)
 
 . ./src/New-SelfSignedCertificateEx.ps1
 
-
+# Serialise a certificate file to a hex string
 function SerialiseCert ([string]$cerFilename, [string]$pwd, [string]$destFile) {
 	$cmdBuilder = New-Object -TypeName System.Text.StringBuilder
 
@@ -25,14 +25,19 @@ function SerialiseCert ([string]$cerFilename, [string]$pwd, [string]$destFile) {
 	echo $cmdBuilder.ToString() > "$dir\$destFile"
 }
 
+# Extract data from a pfx file to various formats used in the wild
 function Extract($src) {
 	$dir = pwd
 
-	./bin/openssl.exe pkcs12 -in "$dir\$src" -out pub.pem -nokeys -passin "pass:$GLOBAL_PASS"
-	./bin/openssl.exe x509 -in pub.pem -out "$dir\$src.cer" -outform der -passin "pass:$GLOBAL_PASS"
-	rm pub.pem
+    # Make `.cer` public-only file from the pfx, and a public-only pem file
+	./bin/openssl.exe pkcs12 -in "$dir\$src" -out "$dir\$src.public.pem" -nokeys -passin "pass:$GLOBAL_PASS"
+	./bin/openssl.exe x509 -in "$dir\$src.public.pem" -out "$dir\$src.cer" -outform der -passin "pass:$GLOBAL_PASS"
+	
+    # Make a full pem file (for AWS & docker) from the pfx
+    ./bin/openssl.exe pkcs12 -in "$dir\$src" -out "$dir\$src.pem" -nodes -clcerts -passin "pass:$GLOBAL_PASS"
 }
 
+# Generate a site-specific certificate
 function GenSite($site, $auth) {
 	$dir = pwd
 	
@@ -41,6 +46,7 @@ function GenSite($site, $auth) {
 	SerialiseCert "$site.pfx.cer" -destFile "$site.cert.txt"
 }
 
+# Adds PFX files to the local machine's trusted certs store.
 function Import-PfxCertificate {
 	param([String]$certPath,[String]$certRootStore = "CurrentUser",[String]$certStore = "My",$pfxPass = $null)
 	$pfx = new-object System.Security.Cryptography.X509Certificates.X509Certificate2
@@ -56,19 +62,28 @@ function Import-PfxCertificate {
 	$store.close()
 }
 
+# Name of a authority cert to use (or create and use)
 $rootFile = "DevRootCA"
 
 # Uncomment this bit to get a root certificate
-#New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "$rootFile.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable -Password $GLOBAL_PASS_SS
-#Extract "$rootFile.pfx"
-#Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
+# You should only do this once
+    ## Make the certificate:
+    New-SelfsignedCertificateEx -Subject "CN=DEVELOPMENT Root CA, OU=Sandbox" -Path "$rootFile.pfx" -IsCA $true -ProviderName "Microsoft Software Key Storage Provider" -Exportable -Password $GLOBAL_PASS_SS
+    ## Extract .cer and .pem files from the .pfx:
+    Extract "$rootFile.pfx"
+    ## Add the .pfx to the local machine's trust store:
+    #Import-PfxCertificate -certPath "$rootFile.pfx.cer" -certRootStore "LocalMachine" -certStore "root" -pfxPass $GLOBAL_PASS_SS
 
 # Make certs for sites
-GenSite "iebwraptest.cloudapp.net" "$rootFile.pfx.cer"
-GenSite "localhost" "$rootFile.pfx.cer"
-#SerialiseCert "core.example.com.pfx" -pwd $GLOBAL_PASS -destFile "core.example.pfx.txt"
+# Requires a root certificate either a proper trusted cert or a test self-sign from above
+    ## Make a cert for localhost
+    GenSite "localhost" "$rootFile.pfx.cer"
+    ## Make a cert for each site
+    #GenSite "mysiet.cloudapp.net" "$rootFile.pfx.cer"
+    #GenSite "other.example.net" "$rootFile.pfx.cer"
+    ## Turn the pfx file into a byte string, if required
+    #SerialiseCert "core.example.com.pfx" -pwd $GLOBAL_PASS -destFile "core.example.pfx.txt"
 
-#GenSite "other.example.net" "$rootFile.pfx.cer"
 
 
 
